@@ -1,0 +1,200 @@
+$player = New-Object -TypeName System.Media.SoundPlayer
+$player.SoundLocation = 'C:\Windows\Media\Windows Proximity Notification.wav'
+$player.Load()
+$player.PlayLooping()
+Start-Sleep -Seconds 5
+$player.Stop()
+
+Function Create-GetSchedTime {   
+Param(   
+$SchedTime   
+)
+      $script:StartTime = (Get-Date).AddSeconds($TotalTime)
+      $RestartDate = ((get-date).AddSeconds($TotalTime)).AddMinutes(-5)
+      $RDate = (Get-Date $RestartDate -f 'MM.dd.yyyy') -replace "\.","/"      # 16/03/2016
+      $RTime = Get-Date $RestartDate -f 'HH:mm'                                    # 09:31
+      &schtasks /delete /tn "Post Maintenance Restart" /f
+      &schtasks /create /sc once /tn "Post Maintenance Restart" /tr "'C:\Windows\system32\cmd.exe' /c shutdown -r -f -t 300" /SD $RDate /ST $RTime /f
+}
+[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
+[System.Reflection.Assembly]::LoadWithPartialName( "Microsoft.VisualBasic") | Out-Null
+#$xCmdString = {rundll32.exe user32.dll,LockWorkStation}
+#Invoke-Command $xCmdString
+$Title = "Computer Reboot Notification"
+$Message = "Your computer has been updated with latest software and requires a reboot. Please save your work and click ""Restart now"" to reboot it now.`nYour computer will automatically reboot in :"
+$Button1Text = "Restart now"
+$Button2Text = "Postpone for 1 hour"
+$Button3Text = "Postpone for 4 hours"
+$Form = $null
+$Button1 = $null
+$Button2 = $null
+$Label = $null
+$TextBox = $null
+$Result = $null
+$timerUpdate = New-Object 'System.Windows.Forms.Timer'
+$TotalTime = 900 #in seconds
+
+Create-GetSchedTime -SchedTime $TotalTime
+$timerUpdate_Tick={
+      # Define countdown timer
+      [TimeSpan]$span = $script:StartTime - (Get-Date)
+      # Update the display
+      $hours = "{0:00}" -f $span.Hours
+      $mins = "{0:00}" -f $span.Minutes
+    $secs = "{0:00}" -f $span.Seconds
+    $labelTime.Text = "{0}:{1}:{2}" -f $hours, $mins, $secs
+      $timerUpdate.Start()
+      if ($span.TotalSeconds -le 0)
+      {
+            $timerUpdate.Stop()
+            &schtasks /delete /tn "Post Maintenance Restart" /f
+            shutdown -r -f /t 0
+      }
+}
+$Form_StoreValues_Closing=
+      {
+            #Store the control values
+      }
+
+$Form_Cleanup_FormClosed=
+      {
+            #Remove all event handlers from the controls
+            try
+            {
+                  $Form.remove_Load($Form_Load)
+                  $timerUpdate.remove_Tick($timerUpdate_Tick)
+                  #$Form.remove_Load($Form_StateCorrection_Load)
+                  $Form.remove_Closing($Form_StoreValues_Closing)
+                  $Form.remove_FormClosed($Form_Cleanup_FormClosed)
+            }
+            catch [Exception]
+            { }
+      }
+
+# Form
+$Form = New-Object -TypeName System.Windows.Forms.Form
+$Form.Text = $Title
+$Form.Size = New-Object -TypeName System.Drawing.Size(407,205)
+$Form.StartPosition = "CenterScreen"
+$Form.Topmost = $true
+$Form.KeyPreview = $true
+$Form.ShowInTaskbar = $True
+$Form.FormBorderStyle = "FixedDialog"
+$Form.MaximizeBox = $Formalse
+$Form.MinimizeBox = $True
+$Icon = [system.drawing.icon]::ExtractAssociatedIcon("c:\Windows\System32\UserAccountControlSettings.exe")
+$Form.Icon = $Icon
+
+# Button One (Reboot/Shutdown Now)
+$Button1 = New-Object -TypeName System.Windows.Forms.Button
+$Button1.Size = New-Object -TypeName System.Drawing.Size(90,25)
+$Button1.Location = New-Object -TypeName System.Drawing.Size(10,135)
+$Button1.Text = $Button1Text
+$Button1.Font = 'Tahoma, 10pt'
+$Button1.Add_Click({
+$player = New-Object -TypeName System.Media.SoundPlayer
+$player.SoundLocation = 'C:\Windows\Media\Windows Proximity Notification.wav'
+$player.Load()
+$player.PlayLooping()
+Start-Sleep -Seconds 5
+$player.Stop()
+shutdown -r -f /t 30
+    <#$msgBoxInput =  [System.Windows.MessageBox]::Show('Are you sure you want to reboot now?','Computer Reboot Confirmation','YesNo','Warning')
+    switch  ($msgBoxInput) {
+        'Yes' {
+            shutdown -r -f /t 0
+            $Form.Close() 
+              }
+
+        'No' {
+          ## Do something
+            }
+                            }
+#>
+})
+$Form.Controls.Add($Button1)
+$Button1.Enabled = $True
+
+# Button Two (Postpone for 1 Hour)
+$Button2 = New-Object -TypeName System.Windows.Forms.Button
+$Button2.Size = New-Object -TypeName System.Drawing.Size(133,25)
+$Button2.Location = New-Object -TypeName System.Drawing.Size(105,135)
+$Button2.Text = $Button2Text
+$Button2.Font = 'Tahoma, 10pt'
+$Button2.Add_Click({
+   $Button2.Enabled = $False
+      $timerUpdate.Stop()
+      $TotalTime = 3600
+      
+      Create-GetSchedTime -SchedTime $TotalTime
+      $timerUpdate.add_Tick($timerUpdate_Tick)
+      $timerUpdate.Start()
+})
+$Form.Controls.Add($Button2)
+
+# Button Three (Postpone for 4 Hours)
+$Button3 = New-Object -TypeName System.Windows.Forms.Button
+$Button3.Size = New-Object -TypeName System.Drawing.Size(140,25)
+$Button3.Location = New-Object -TypeName System.Drawing.Size(243,135)
+$Button3.Text = $Button3Text
+$Button3.Font = 'Tahoma, 10pt'
+$Button3.Add_Click({
+   $Button2.Enabled = $False
+      $Button3.Enabled = $False
+      $timerUpdate.Stop()
+      $TotalTime = 14400
+      Create-GetSchedTime -SchedTime $TotalTime
+      $timerUpdate.add_Tick($timerUpdate_Tick)
+      $timerUpdate.Start()
+})
+$Form.Controls.Add($Button3)
+$Button3.Enabled = $True
+
+# Label
+$Label = New-Object -TypeName System.Windows.Forms.Label
+$Label.Size = New-Object -TypeName System.Drawing.Size(380,65)
+$Label.Location = New-Object -TypeName System.Drawing.Size(10,15)
+$Label.Text = $Message
+$label.Font = 'Tahoma, 10pt'
+$Form.Controls.Add($Label)
+
+# Label2
+#$Label2 = New-Object -TypeName System.Windows.Forms.Label
+#$Label2.Size = New-Object -TypeName System.Drawing.Size(355,30)
+#$Label2.Location = New-Object -TypeName System.Drawing.Size(10,100)
+#$Label2.Text = $Message2
+#$label2.Font = 'Tahoma, 10pt'
+#$Form.Controls.Add($Label2)
+
+# labelTime
+$labelTime = New-Object 'System.Windows.Forms.Label'
+$labelTime.AutoSize = $True
+$labelTime.Font = 'Arial, 26pt, style=Bold'
+$labelTime.Location = '120, 90'
+
+$labelTime.Name = 'labelTime'
+$labelTime.Size = '43, 15'
+$labelTime.TextAlign = 'MiddleCenter'
+$labelTime.ForeColor = "Red"
+$Form.Controls.Add($labelTime)
+
+#Start the timer
+$timerUpdate.add_Tick($timerUpdate_Tick)
+$timerUpdate.Start()
+# Show
+$Form.Add_Shown({$Form.Activate()})
+#Clean up the control events
+$Form.add_FormClosed($Form_Cleanup_FormClosed)
+#Store the control values when form is closing
+#$Form.add_Closing($Form_StoreValues_Closing)
+$Form.Add_Closing({$_.cancel = $true})
+#Show the Form
+$Form.ShowDialog() | Out-Null
+
+
+#$Form.Focused
+#return $Form.ShowDialog()
+
+#$Form.Add_Closing({$_.cancel = $false})
+#Show the Form
+#return $Form.ShowDialog()
